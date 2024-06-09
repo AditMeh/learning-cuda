@@ -22,11 +22,11 @@ void printvec(float *arr, int len){
 
     printf("\n\n");
 }
+
 int main() {
 
     float* vec1d; float* vec2d; float* resultd; // the d means device
     int len = 5;
-
 
     // Make the first and second vector and put it on the GPU
     float vec1[len];
