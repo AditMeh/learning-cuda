@@ -18,7 +18,6 @@ __global__ void matmulkernel(float *d_A, float *d_B, float *result, int WIDTH)
             ret += d_A[row * WIDTH + i] * d_B[i * WIDTH + col];
         }
         result[row * WIDTH + col] = ret;
-        // printf("(%i, %i) %f\n", row, col, ret);
     }
 }
 
@@ -63,9 +62,12 @@ void invoke_kernel(float *h_A, float *h_B, float *h_C, int size)
     int side_length = std::sqrt(size);
     int grid_side_length = (side_length + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    dim3 dimBlock(size, size);
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid(grid_side_length, grid_side_length);
-    printf("%d %d\n", grid_side_length, side_length);
+
+    printf("%d %d %d\n", size, grid_side_length, side_length);
+    
+    printf("Threads launched: %d, Total Size: %d \n", (int) (pow(grid_side_length,2) * pow(BLOCK_SIZE, 2)), size);
 
     matmulkernel<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, side_length);
     cudaMemcpy(h_C, d_C, size * sizeof(float), cudaMemcpyDeviceToHost);
@@ -84,7 +86,7 @@ int main(int argc, const char *argv[])
         float h_A[size];
         float h_B[size];
         float h_C[size] = {0};
-        int PRINT_FLAG = (int)(*argv[1] - '0');
+        // int PRINT_FLAG = (int)(*argv[1] - '0');
 
         // Make the first and second vector and put it on the GPU
         setrand(h_A, BLOCK_SIZE * i);
