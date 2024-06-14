@@ -2,8 +2,10 @@
 #include <iostream>
 #include <chrono>
 #include <cmath>
+#include <limits>
 
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 32
+#define MAX_RUNS 2
 
 __global__ void matmulkernel(float *d_A, float *d_B, float *result, int WIDTH)
 {
@@ -21,22 +23,6 @@ __global__ void matmulkernel(float *d_A, float *d_B, float *result, int WIDTH)
     }
 }
 
-void printvec(float *arr, int len)
-{
-    for (int j = 0; j < len; j++)
-    {
-        printf("[");
-        for (int i = 0; i < len; i++)
-        {
-            printf("%f ", arr[j * len + i]);
-        }
-        printf("]");
-
-        printf("\n");
-    }
-    printf("\n");
-}
-
 void setrand(float *arr, int len)
 {
     for (int i = 0; i < len; i++)
@@ -48,9 +34,12 @@ void setrand(float *arr, int len)
     }
 }
 
-void invoke_kernel(float *h_A, float *h_B, float *h_C, int size)
+float invoke_kernel(float *h_A, float *h_B, float *h_C, int size)
 {
     float *d_A, *d_B, *d_C;
+    cudaEvent_t start;
+    cudaEvent_t stop;
+    float ms = 0;
 
     cudaMalloc((void **)&d_A, size * sizeof(float));
     cudaMalloc((void **)&d_B, size * sizeof(float));
@@ -65,42 +54,68 @@ void invoke_kernel(float *h_A, float *h_B, float *h_C, int size)
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid(grid_side_length, grid_side_length);
 
-    printf("%d %d %d\n", size, grid_side_length, side_length);
-    
-    printf("Threads launched: %d, Total Size: %d \n", (int) (pow(grid_side_length,2) * pow(BLOCK_SIZE, 2)), size);
+    cudaDeviceSynchronize();
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
 
     matmulkernel<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, side_length);
+
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&ms, start, stop);
+    cudaError_t err = cudaGetLastError();
+
+    if (err != cudaSuccess)
+    {
+        printf("CUDA Error: %s\n", cudaGetErrorString(err));
+    }
     cudaMemcpy(h_C, d_C, size * sizeof(float), cudaMemcpyDeviceToHost);
 
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
+    return ms;
 }
 
 int main(int argc, const char *argv[])
 {
-
-    for (int i = 1; i < 100; i++)
+    for (int i = 1; i < 25; i++)
     {
+        float avg_runtime = 0.0;
+        float min_runtime = std::numeric_limits<float>::max();
+
         int size = (BLOCK_SIZE * i) * (BLOCK_SIZE * i);
-        float h_A[size];
-        float h_B[size];
-        float h_C[size] = {0};
-        // int PRINT_FLAG = (int)(*argv[1] - '0');
 
-        // Make the first and second vector and put it on the GPU
-        setrand(h_A, BLOCK_SIZE * i);
-        setrand(h_B, BLOCK_SIZE * i);
+        int side_length = std::sqrt(size);
+        int grid_side_length = (side_length + BLOCK_SIZE - 1) / BLOCK_SIZE;
+        printf("Threads launched: %d, Matrix Dim: (%d, %d)\n", (int)(pow(grid_side_length, 2) * pow(BLOCK_SIZE, 2)), side_length, side_length);
 
-        auto start = std::chrono::high_resolution_clock::now();
+        for (int run = 0; run < MAX_RUNS; run++)
+        {
+            float h_A[size];
+            float h_B[size];
+            float h_C[size] = {0};
+            // int PRINT_FLAG = (int)(*argv[1] - '0');
 
-        invoke_kernel(h_A, h_B, h_C, size);
+            // Make the first and second vector and put it on the GPU
+            setrand(h_A, BLOCK_SIZE * i);
+            setrand(h_B, BLOCK_SIZE * i);
 
-        auto end = std::chrono::high_resolution_clock::now();
+            cudaDeviceSynchronize();
 
-        std::chrono::duration<double, std::milli> duration = end - start;
+            float ms = invoke_kernel(h_A, h_B, h_C, size);
 
-        std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+            avg_runtime += (float)ms;
+            if (min_runtime > ms)
+            {
+                min_runtime = ms;
+            }
+        }
+
+        std::cout << "Avg Execution time: " << avg_runtime / (MAX_RUNS - 1.0) << " ms" << std::endl;
+        std::cout << "Min Execution time: " << min_runtime << " ms" << std::endl;
+
     }
     return 0;
 }
