@@ -29,7 +29,7 @@ __global__ void Tiled_MatmulKernel(float *d_A, float *d_B, float *result, int WI
 
         // We're looking at the ph'th chunk of the row'th col of d_A
         // 1. row*WIDTH takes us to the start of the row'th row.
-        // 2. ph*BLOCK_SIZE takes us to the start of the current chunk we're looking at
+        // 2. ph*BLOCK_SIZE takes us to the start of the current chunk we're looking at~
         // 3. threadIdx.x moves up to the current thread in the current block
         Mds[threadIdx.y][threadIdx.x] = d_A[row * WIDTH + ph * BLOCK_SIZE + threadIdx.x];
 
@@ -41,7 +41,7 @@ __global__ void Tiled_MatmulKernel(float *d_A, float *d_B, float *result, int WI
         // 3. * WIDTH takes us to the start of the row at which the column element we need to access it
         // 4. + col then offsets within the row to go to the column we're operating on.
         Nds[threadIdx.y][threadIdx.x] = d_B[(ph * BLOCK_SIZE + threadIdx.y) * WIDTH + col];
-
+    
         // Once this is done Nds will hold all of all elements of M within this current block
 
         __syncthreads();
